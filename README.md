@@ -1,0 +1,2 @@
+# Galaxy-Safari
+Klasifikátor galaxií
