@@ -453,10 +453,6 @@ class GalaxyRatingApp(QWidget):
         )
 
         # Hlavné (výrazné) parametre
-        """main_lines = [f"{col}: {row[col]}" for col in self.main_param_columns if col in row]
-        self.main_params_label.setText(
-            "\n".join(main_lines) if main_lines else "(žiadne hlavné parametre)"
-        )"""
         DISPLAY_NAMES = {
             "gz2_class": "GZ2",
             "class_from_conf": "Conf. class",
@@ -493,31 +489,6 @@ class GalaxyRatingApp(QWidget):
         self.main_params_label.setText(html)
 
         # Ostatné parametre
-        """font = QFont("Consolas")     # alebo "Courier New"
-        font.setPointSize(10)
-        self.params_label.setFont(font)
-
-        lines = []
-        for col in self.param_columns:
-            if col not in row:
-                continue
-
-            value = row[col]
-
-            # zaokrúhlenie floatov
-            if isinstance(value, float):
-                value = f"{value:10.4f}"      # 4 desatinné miesta
-
-            lines.append(f"{col:<20} {value:>8}")
-
-        text = ""
-        for i in range(0, len(lines), 2):
-            left = lines[i]
-            right = lines[i+1] if i+1 < len(lines) else ""
-            text += f"{left}       {right}\n"
-
-        self.params_label.setText(text)"""
-
         html = "<table cellspacing='2'>"
 
         for i in range(0, len(self.param_columns), 2):
@@ -542,18 +513,6 @@ class GalaxyRatingApp(QWidget):
         html += "</table>"
 
         self.params_label.setText(html)
-
-
-        """lines = [f"{col}: {row[col]}" for col in self.param_columns if col in row]
-
-        text = ""
-        for i in range(0, len(lines), 2):
-            left = lines[i]
-            right = lines[i+1] if i+1 < len(lines) else ""
-            text += f"{left:<35}{right}\n"
-
-        self.params_label.setText(text)"""
-        #self.params_label.setText("\n".join(lines) if lines else "(žiadne ďalšie parametre)")
 
         # Predvyplnenie checkboxov a poznámky, ak už bol tento obrázok hodnotený
         key = self._row_key(row)
