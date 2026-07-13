@@ -1,5 +1,5 @@
 # Galaxy-Safari
-Klasifikátor galaxií. Po ohodnotení galaxie treba stlačiť tlačítko uložiť, ak sa použije tlačítko ďalši, tak sa hodnotenie neuloží
+Klasifikátor galaxií. Po ohodnotení galaxie treba stlačiť tlačítko uložiť, ak sa použije tlačítko ďalši, tak sa hodnotenie neuloží.
 Malo by to z výstupného súboru aj načítať už ohodnotené galaxie a tým pádom by nemalo znova načitavať z predošlého hodnotenia
 
 
