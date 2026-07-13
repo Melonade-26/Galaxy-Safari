@@ -1,24 +1,3 @@
-"""
-Galaxy Rating App
-==================
-PyQt5 aplikácia na manuálne hodnotenie galaxií z obrázkov.
-
-- Obrázky sa nenačítavajú všetky naraz do pamäte - vždy je v pamäti
-  iba aktuálne zobrazený obrázok (QPixmap sa vytvára/zahadzuje za chodu).
-- Dáta (ra, dec, číselné parametre) sa berú z CSV súboru cez pandas
-  (to je ľahké aj pre stovky tisíc riadkov, lebo sú to len čísla).
-- Otázky sú checkboxy, dá sa zaškrtnúť viac naraz, plus poznámka (text).
-- Tlačidlo "Uložiť" vpravo dole zapíše/aktualizuje riadok vo výstupnom
-  textovom (CSV) súbore a posunie na ďalší obrázok.
-- Poradie obrázkov: sekvenčné (podľa CSV) alebo náhodné (shuffle),
-  prepínacie tlačidlá/menu vedľa tlačidla Uložiť.
-
-DOPLŇ SI:
-1) CONFIG sekciu nižšie (cesty, názvy stĺpcov, zoznam otázok).
-2) Funkciu `scale_pixmap()` - vlož tam svoju vlastnú logiku škálovania,
-   miesto je jasne označené komentárom "TU VLOŽ SVOJU FUNKCIU".
-"""
-
 import sys
 import os
 import random
@@ -34,76 +13,77 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtGui import QPixmap, QImage
 from PyQt5.QtCore import Qt, QEvent
-from PyQt5.QtGui import QFont
+import warnings
 
-# ============================== CONFIG ===================================
-CSV_PATH = "GZ_all_data_new.csv"
+warnings.filterwarnings("ignore")
 
-# Priečinok, kde sú uložené obrázky
-IMAGE_DIR = r"C:\Users\melo9\OneDrive\Desktop\Astronomy\GZ3\obrazky_podla_confidence"
+CSV_PATH = "Galaxy_stats_compact.csv"
+IMAGE_DIR = "obrazky"
 
-# Názvy stĺpcov v CSV, ktoré obsahujú ra a dec
-RA_COL = "ra_x"
-DEC_COL = "dec_x"
 
-# Ako sú pomenované súbory obrázkov - uprav podľa skutočného formátu.
-# Príklad nižšie predpokladá napr. "123.456700_45.123400.jpg"
-# Над {ra} a {dec} môžeš dať aj vlastné formátovanie (počet desatinných miest a pod.)
+RA_COL = "ra"
+DEC_COL = "dec"
+NAME = "dr7objid"
+
 def image_filename(row):
-    ra = row[RA_COL]
-    dec = row[DEC_COL]
-    return f"galaxy_{ra:.4f}_{dec:.4f}.jpg"
-
-# Ktoré stĺpce z CSV zobrazovať pod obrázkom (číselné aj textové).
-# Ak necháš None, použijú sa automaticky všetky číselné stĺpce okrem ra/dec
-# (textové stĺpce sa v tom prípade NEzobrazia - preto ich radšej vymenuj ručne).
-PARAM_COLUMNS = ["p_el","p_cw","p_acw","p_edge","p_dk","p_mg","p_cs","p_el_debiased","p_cs_debiased","petroMag_r",
-                 "petroMagErr_r","petroR50_r","petroR90_r","modelMag_u","modelMag_g","modelMag_r","modelMag_i","modelMag_z","extinction_u","extinction_g","extinction_r",
-                 "extinction_i","extinction_z","mRrCc_r","mRrCcErr_r","lnLStar_r","lnLExp_r","lnLDeV_r","P_EL_gz1","P_CW_gz1","P_ACW_gz1","P_EDGE_gz1","P_DK_gz1","P_MG_gz1",
-                 "P_CS_gz1","P_EL_DEBIASED_gz1","P_CS_DEBIASED_gz1"]#None  # napr. ["P_EL", "P_CW", "P_ACW", "redshift", ...]
+    id = row[NAME]
+    return f"galaxy_{id}.jpg"
 
 MAIN_PARAM_COLUMNS = [
-    "gz2_class",
+    "base_type",
+    "min_confidence",
+    "GZ2_type",
     "GZ1_type",
-    "confidence",
-    "class_from_conf",
-    "spiral",
-    "elliptical",
-    "uncertain"
-    #"nvote"
 ]
 
-#"gz2_class","class_from_conf","confidence","GZ1_type", "nvote",
 
-# Zoznam otázok - každá bude jeden checkbox, dá sa zaškrtnúť viac naraz
+PARAM_COLUMNS = None
+QUESTION_DISPLAY_NAMES = {
+    "Bars":                     "Bars – priečne pásy",
+    "Bulge":                    "Bulge – centrálne zhrubnutie",
+    "Dust_lane":                "Dust lane – prašný pás",
+    "Dwarf_companions":         "Dwarf companions – trpasličí spoločníci",
+    "Extraplanar_features":     "Extraplanar features – mimoplošné štruktúry",
+    "Flocculent_arms":          "Flocculent arms – chumáčovité ramená",
+    "Grand_design_spiral_arms": "Grand design spiral arms – veľkolepé špirálovité ramená",
+    "Jellyfish":                "Jellyfish – medúzovité galaxie",
+    "Nuclear_ring":             "Nuclear ring – jadrový prstenec",
+    "One_armed":                "One-armed – jednoramienkové",
+    "Ongoing_merger":           "Ongoing merger – prebiehajúce splývanie",
+    "Pitch_angle":              "Pitch angle – uhol špirálovitých ramien",
+    "Polar_rings":              "Polar rings – polárne prstence",
+    "Ringed":                   "Ringed – prstencové",
+    "Superthin disk":           "Superthin disk – super-tenký disk",
+    "Tidal_features":           "Tidal features – slapové štruktúry",
+    "Warp":                     "Warp – prehnutý disk",
+}
+
+CLASS_COL = "base_type"
+ELLIPTICAL_VALUES = {"E"}
+
 QUESTIONS = [
-    "Priečka",
-    "Grand design špirálne ramená",
-    "Flocculent spiral arms",
-    "One-armed spiral",
-    "Delenie ramien podľa pitch angle",
-    "Prstencové",
-    "Nuclear ring",
-    "Polar ring",
-    "Tidal features",
-    "Merger",
-    "Warp",
+    "Bars",
     "Bulge",
-    "Superthin disk",
-    "Dust lane",
-    "Extraplanar features",
+    "Dust_lane",
+    "Dwarf_companions",
+    "Extraplanar_features",
+    "Flocculent_arms",
+    "Grand_design_spiral_arms",
     "Jellyfish",
-    "Trpasličie galaxie",
-    "Chybné"
+    "Nuclear_ring",
+    "One_armed",
+    "Ongoing_merger",
+    "Pitch_angle",
+    "Polar_rings",
+    "Ringed",
+    "Superthin disk",
+    "Tidal_features",
+    "Warp",
+    "Neviem",
 ]
 
-
-# Kam sa ukladajú výsledky hodnotenia
+CATEGORY_IMAGES_DIR = "Obrazky_kategorii"
 OUTPUT_PATH = "ratings_output.csv"
-
-
-
-# ============================ KONIEC CONFIG ===============================
 
 
 def qpixmap_to_numpy(pixmap: QPixmap) -> np.ndarray:
@@ -132,10 +112,6 @@ def numpy_to_qpixmap(arr: np.ndarray) -> QPixmap:
 # ---------------------------------------------------------------------
 # VLASTNÉ TRANSFORMAČNÉ FUNKCIE (pracujú na jednom 2D kanáli naraz)
 # ---------------------------------------------------------------------
-
-def org_transform(wcs):
-    return wcs
-
 def linear_transform(wcs_w4, f_range=(0, 255)):
     maxi = np.nanmax(wcs_w4)
     mini = np.nanmin(wcs_w4)
@@ -149,13 +125,9 @@ def linear_transform(wcs_w4, f_range=(0, 255)):
 
 
 def asinh_transform(wcs, a=0.1):
-    wcs = linear_transform(wcs, f_range = (0, 1))
-    #wcs /= 255
     wcs = np.true_divide(wcs, a)
     wcs = np.arcsinh(wcs)
     wcs = np.true_divide(wcs, np.arcsinh(1.0 / a))
-    wcs = linear_transform(wcs)
-    #wcs *= 255
     return wcs
 
 
@@ -181,12 +153,11 @@ def custom_transform(wcs):
 # Priraď, ktorá transformácia patrí ku ktorému z 4 tlačidiel.
 # Pokojne si premenuj/popresúvaj podľa toho, čo chceš mať na ktorom tlačidle.
 SCALE_MODE_FUNCTIONS = {
-    #"scale_1": org_transform, #linear_transform,
-    "scale_1": linear_transform, #asinh_transform,
+    "scale_1": linear_transform,
     "scale_2": square_two_transform,
     "scale_3": square_three_transform,
-    #"scale_5": custom_transform,  # ak by si pridal aj piate tlačidlo
-    "scale_4": asinh_transform
+    "scale_4": asinh_transform,
+    # "scale_5": custom_transform,  # ak by si pridal aj piate tlačidlo
 }
 
 
@@ -234,6 +205,160 @@ def scale_pixmap(pixmap: QPixmap, mode: str) -> QPixmap:
     return numpy_to_qpixmap(new_arr)
 
 
+SUPPORTED_IMG_EXT = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff"}
+HOVER_THUMB_SIZE = 220  # px - veľkosť náhľadu pri hover
+
+
+def first_image_in_folder(category: str) -> str | None:
+    """Vráti cestu k prvému obrázku v priečinku kategórie, alebo None."""
+    folder = os.path.join(CATEGORY_IMAGES_DIR, category)
+    if not os.path.isdir(folder):
+        return None
+    for f in sorted(os.listdir(folder)):
+        if os.path.splitext(f)[1].lower() in SUPPORTED_IMG_EXT:
+            return os.path.join(folder, f)
+    return None
+
+
+class HoverPreviewCheckBox(QCheckBox):
+    """
+    QCheckBox ktorý pri nabehnutí myšou zobrazí malé vyskakovacie okno
+    s prvým obrázkom z priečinka danej kategórie.
+    Ak priečinok neexistuje alebo je prázdny, správa sa ako normálny checkbox.
+    """
+    def __init__(self, label: str, category: str, parent=None):
+        super().__init__(label, parent)
+        self._category = category
+        self._popup: QWidget | None = None
+        self._thumb_path = first_image_in_folder(category)
+        if self._thumb_path:
+            self.setMouseTracking(True)
+
+    def enterEvent(self, event):
+        if not self._thumb_path:
+            return
+        pix = QPixmap(self._thumb_path)
+        if pix.isNull():
+            return
+        pix = pix.scaled(HOVER_THUMB_SIZE, HOVER_THUMB_SIZE,
+                         Qt.KeepAspectRatio, Qt.SmoothTransformation)
+
+        popup = QWidget(None, Qt.ToolTip | Qt.FramelessWindowHint)
+        popup.setAttribute(Qt.WA_ShowWithoutActivating)
+        layout = QVBoxLayout(popup)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(2)
+
+        img_lbl = QLabel()
+        img_lbl.setPixmap(pix)
+        layout.addWidget(img_lbl)
+
+        display_name = QUESTION_DISPLAY_NAMES.get(self._category, self._category)
+        name_lbl = QLabel(display_name)
+        name_lbl.setStyleSheet("font-size: 11px; color: #ccc; background: transparent;")
+        name_lbl.setAlignment(Qt.AlignCenter)
+        layout.addWidget(name_lbl)
+
+        popup.setStyleSheet("background-color: #2b2b2b; border: 1px solid #555;")
+        popup.adjustSize()
+
+        # Umiestni popup napravo od checkboxu
+        global_pos = self.mapToGlobal(self.rect().topRight())
+        popup.move(global_pos.x() + 6, global_pos.y())
+        popup.show()
+        self._popup = popup
+
+    def leaveEvent(self, event):
+        if self._popup:
+            self._popup.hide()
+            self._popup.deleteLater()
+            self._popup = None
+
+
+class CategoryPreviewWindow(QWidget):
+    """
+    Samostatné okno zobrazujúce ukážkové obrázky jednej kategórie.
+    Hľadá všetky obrázky v CATEGORY_IMAGES_DIR/{category}/ a zobrazí
+    ich v mriežke (max IMAGE_COLS stĺpcov), každý s rozmerom THUMB_SIZE.
+    Okno sa dá zatvoriť, znovu otvoriť - vždy jedno okno na kategóriu.
+    """
+    THUMB_SIZE = 200   # px - veľkosť strany miniatúry
+    IMAGE_COLS = 3     # počet stĺpcov v mriežke
+    SUPPORTED_EXT = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff"}
+
+    def __init__(self, category: str, parent=None):
+        super().__init__(parent, Qt.Window)
+        self.category = category
+        display_name = QUESTION_DISPLAY_NAMES.get(category, category)
+        self.setWindowTitle(f"Ukážky: {display_name}")
+        self.resize(700, 600)
+        self._build_ui()
+
+    def _build_ui(self):
+        outer = QVBoxLayout(self)
+
+        display_name = QUESTION_DISPLAY_NAMES.get(self.category, self.category)
+        title = QLabel(f"<b>{display_name}</b>")
+        title.setStyleSheet("font-size: 18px; padding: 6px;")
+        outer.addWidget(title)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        outer.addWidget(scroll)
+
+        container = QWidget()
+        grid = QGridLayout(container)
+        grid.setSpacing(8)
+        scroll.setWidget(container)
+
+        folder = os.path.join(CATEGORY_IMAGES_DIR, self.category)
+        if not os.path.isdir(folder):
+            no_img = QLabel(f"Priečinok nenájdený:\n{folder}")
+            no_img.setAlignment(Qt.AlignCenter)
+            grid.addWidget(no_img, 0, 0)
+            return
+
+        files = sorted(
+            f for f in os.listdir(folder)
+            if os.path.splitext(f)[1].lower() in self.SUPPORTED_EXT
+        )
+
+        if not files:
+            no_img = QLabel("Žiadne obrázky v priečinku.")
+            no_img.setAlignment(Qt.AlignCenter)
+            grid.addWidget(no_img, 0, 0)
+            return
+
+        for idx, fname in enumerate(files):
+            path = os.path.join(folder, fname)
+            row, col = divmod(idx, self.IMAGE_COLS)
+
+            cell = QWidget()
+            cell_layout = QVBoxLayout(cell)
+            cell_layout.setContentsMargins(2, 2, 2, 2)
+
+            img_label = QLabel()
+            img_label.setAlignment(Qt.AlignCenter)
+            pix = QPixmap(path)
+            if not pix.isNull():
+                pix = pix.scaled(
+                    self.THUMB_SIZE, self.THUMB_SIZE,
+                    Qt.KeepAspectRatio, Qt.SmoothTransformation
+                )
+                img_label.setPixmap(pix)
+            else:
+                img_label.setText("(chyba)")
+
+            name_label = QLabel(fname)
+            name_label.setAlignment(Qt.AlignCenter)
+            name_label.setWordWrap(True)
+            name_label.setStyleSheet("font-size: 11px; color: #888;")
+
+            cell_layout.addWidget(img_label)
+            cell_layout.addWidget(name_label)
+            grid.addWidget(cell, row, col)
+
+
 class GalaxyRatingApp(QWidget):
     def __init__(self):
         super().__init__()
@@ -257,30 +382,77 @@ class GalaxyRatingApp(QWidget):
         self.current_pixmap_raw = None  # originálny QPixmap aktuálneho obrázku (po custom škálovaní)
         self.zoom_factor = 1.0  # zoom navyše nad "fit do okna"
 
-        # Načítaj už uložené hodnotenia (ak súbor existuje), aby sa dalo pokračovať
-        # a aby sa už ohodnotené obrázky nezobrazovali znova.
+        self.exclude_elliptical = False
+
+        # Načítaj už uložené hodnotenia
         self.existing_results = self._load_existing_results()
 
-        # Poradie obrázkov - na začiatku sekvenčné, ale len z tých, čo ešte nemajú výsledok
-        self.order = self._build_order(shuffle=False)
+        # Poradie obrázkov - vždy round-robin cez base_type, náhodné v rámci tried
+        self.order = self._build_order()
+
+        self._category_windows: dict[str, CategoryPreviewWindow] = {}
 
         self._build_ui()
         self._load_current_image()
 
     # ------------------------------------------------------------ Helpers
     def _row_key(self, row):
-        return (str(row[RA_COL]), str(row[DEC_COL]))
+        return str(row[NAME])
 
-    def _build_order(self, shuffle: bool):
-        """Vytvorí zoznam indexov do self.df, ktoré ešte NIE SÚ vo výstupnom
-        súbore (t.j. ešte neboli ohodnotené). Voliteľne ich poprehadzuje."""
-        indices = [
-            i for i in range(len(self.df))
-            if self._row_key(self.df.iloc[i]) not in self.existing_results
-        ]
-        if shuffle:
-            random.shuffle(indices)
-        return indices
+    def _build_order(self):
+        """
+        Zostaví poradie indexov do self.df pre neohodnotené galaxie.
+        Algoritmus: round-robin cez triedy v stĺpci base_type.
+          - Každá trieda dostane vlastný náhodne pomiešaný zoznam.
+          - Ber po jednom z každej triedy (cyklicky), kým nie sú všetky prázdne.
+        Výsledok: striedajú sa rôzne typy galaxií, nikdy nevidíš 50× rovnaký typ.
+        Filter: ak self.exclude_elliptical == True, vynechajú sa riadky
+                kde base_type == "E".
+        """
+        from collections import defaultdict
+
+        has_class = CLASS_COL in self.df.columns
+
+        def keep(i):
+            if self._row_key(self.df.iloc[i]) in self.existing_results:
+                return False
+            if self.exclude_elliptical and has_class:
+                if str(self.df.iloc[i][CLASS_COL]).strip() in ELLIPTICAL_VALUES:
+                    return False
+            return True
+
+        candidates = [i for i in range(len(self.df)) if keep(i)]
+
+        if not has_class:
+            # base_type stĺpec neexistuje - padback na náhodné poradie
+            random.shuffle(candidates)
+            return candidates
+
+        # Rozdeľ podľa base_type, každú skupinu pomiešaj
+        groups = defaultdict(list)
+        for i in candidates:
+            cls = str(self.df.iloc[i][CLASS_COL]).strip()
+            groups[cls].append(i)
+        """for cls in groups:
+            random.shuffle(groups[cls])"""
+        
+        CONFIDENCE_COL = "min_confidence"  # názov stĺpca v tvojom CSV
+        for cls in groups:
+            if CONFIDENCE_COL in self.df.columns:
+                groups[cls].sort(key=lambda i: self.df.iloc[i][CONFIDENCE_COL])
+                # .pop() berie z konca → najvyšší confidence príde prvý
+            else:
+                random.shuffle(groups[cls])
+
+        # Round-robin: ber po jednom z každej triedy
+        keys = list(groups.keys())
+        random.shuffle(keys)  # poradie tried tiež náhodné
+        result = []
+        while any(groups[k] for k in keys):
+            for k in keys:
+                if groups[k]:
+                    result.append(groups[k].pop())
+        return result
 
     # ----------------------------------------------------------------- UI
     def _build_ui(self):
@@ -288,14 +460,11 @@ class GalaxyRatingApp(QWidget):
 
         # ---------- Ľavá strana: tlačidlá škálovania + obrázok + parametre ----------
         left_layout = QVBoxLayout()
-
+        list_nazov = ["Linear", "Square 2", "Square 3", "AsinH"]
         scale_buttons_layout = QHBoxLayout()
         self.scale_buttons = {}
-        #nazvy = ["Pôvodné", "Lineárne", "Mocnina 2", "Mocnina 3", "Vlastné", "AsinH"]
-        nazvy = ["Lineárne", "Mocnina 2", "Mocnina 3", "AsinH"]
         for i, mode in enumerate(["scale_1", "scale_2", "scale_3", "scale_4"], start=1):
-            #btn = QPushButton(f"Mierka {i}")
-            btn = QPushButton(str(nazvy[i - 1]))
+            btn = QPushButton(list_nazov[i - 1])
             btn.clicked.connect(lambda checked, m=mode: self._apply_scale(m))
             scale_buttons_layout.addWidget(btn)
             self.scale_buttons[mode] = btn
@@ -303,17 +472,17 @@ class GalaxyRatingApp(QWidget):
 
         self.image_label = QLabel("Načítavam obrázok...")
         self.image_label.setAlignment(Qt.AlignCenter)
-        self.image_label.setMinimumSize(400, 400)
+        self.image_label.setMinimumSize(200, 200)
         self.image_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.image_label.setFrameShape(QFrame.Box)
         self.image_label.installEventFilter(self)  # kvôli zoomu kolieskom myši
-        left_layout.addWidget(self.image_label, stretch=1)
+        left_layout.addWidget(self.image_label, stretch=3)
 
         # Info o aktuálnom obrázku (ra, dec, poradie)
         self.info_label = QLabel("")
         left_layout.addWidget(self.info_label)
 
-        # ---- Parametre pod obrázkom: hlavné (výrazné) + ostatné ----
+        # ---- Parametre pod obrázkom: len hlavné (výrazné) ----
         params_box = QGroupBox("Parametre")
         params_box_layout = QVBoxLayout()
 
@@ -321,27 +490,11 @@ class GalaxyRatingApp(QWidget):
         self.main_params_label.setWordWrap(True)
         self.main_params_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         self.main_params_label.setStyleSheet(
-            "font-size: 12px; font-weight: bold; padding: 3px;"
+            "font-size: 18px; font-weight: bold; padding: 6px;"
         )
         params_box_layout.addWidget(self.main_params_label)
-
-        separator = QFrame()
-        separator.setFrameShape(QFrame.HLine)
-        params_box_layout.addWidget(separator)
-
-        self.params_label = QLabel("")
-        self.params_label.setWordWrap(True)
-        self.params_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-        self.params_label.setStyleSheet("font-size: 12px; padding: 2px;")
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setMaximumHeight(200)
-        scroll.setWidget(self.params_label)
-        params_box_layout.addWidget(scroll, stretch=1)
-
         params_box.setLayout(params_box_layout)
-        params_box.setFixedHeight(230) 
-        left_layout.addWidget(params_box)#, stretch=1
+        left_layout.addWidget(params_box)
 
         # Navigácia Prev/Next
         nav_layout = QHBoxLayout()
@@ -358,16 +511,52 @@ class GalaxyRatingApp(QWidget):
         # ---------- Pravá strana: otázky (checkboxy) + poznámka + uloženie ----------
         right_layout = QVBoxLayout()
 
-        questions_box = QGroupBox("Otázky")
-        questions_layout = QVBoxLayout()
+        questions_box = QGroupBox("Kategórie")
+        questions_scroll = QScrollArea()
+        questions_scroll.setWidgetResizable(True)
+        questions_container = QWidget()
+        questions_layout = QVBoxLayout(questions_container)
+        questions_layout.setSpacing(2)
         self.checkboxes = []
+
         for q in QUESTIONS:
-            cb = QCheckBox(q)
-            questions_layout.addWidget(cb)
+            row_widget = QWidget()
+            row_layout = QHBoxLayout(row_widget)
+            row_layout.setContentsMargins(2, 1, 2, 1)
+
+            # "Neviem" dostane oddeľovač a nemá folder
+            if q == "Neviem":
+                sep = QFrame()
+                sep.setFrameShape(QFrame.HLine)
+                questions_layout.addWidget(sep)
+                cb = QCheckBox(q)
+            else:
+                cb = HoverPreviewCheckBox(q, q)
+
+            cb.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+            row_layout.addWidget(cb)
             self.checkboxes.append(cb)
+
+            # Tlačidlo 👁 len pre kategórie s existujúcim priečinkom
+            cat_folder = os.path.join(CATEGORY_IMAGES_DIR, q)
+            if os.path.isdir(cat_folder):
+                preview_btn = QPushButton("👁")
+                preview_btn.setFixedSize(28, 28)
+                preview_btn.setToolTip(f"Ukáž príklady: {QUESTION_DISPLAY_NAMES.get(q, q)}")
+                preview_btn.clicked.connect(
+                    lambda checked, cat=q: self._open_category_preview(cat)
+                )
+                row_layout.addWidget(preview_btn)
+
+            questions_layout.addWidget(row_widget)
+
         questions_layout.addStretch()
-        questions_box.setLayout(questions_layout)
-        right_layout.addWidget(questions_box)
+        questions_scroll.setWidget(questions_container)
+
+        questions_box_layout = QVBoxLayout()
+        questions_box_layout.addWidget(questions_scroll)
+        questions_box.setLayout(questions_box_layout)
+        right_layout.addWidget(questions_box, stretch=1)
 
         note_box = QGroupBox("Poznámka")
         note_layout = QVBoxLayout()
@@ -379,15 +568,16 @@ class GalaxyRatingApp(QWidget):
 
         right_layout.addStretch()
 
-        # Voľba poradia obrázkov
-        order_box = QGroupBox("Poradie obrázkov")
-        order_layout = QHBoxLayout()
-        self.sequential_btn = QPushButton("Sekvenčné")
-        self.sequential_btn.clicked.connect(self._set_sequential_order)
-        self.random_btn = QPushButton("Náhodné")
-        self.random_btn.clicked.connect(self._set_random_order)
-        order_layout.addWidget(self.sequential_btn)
-        order_layout.addWidget(self.random_btn)
+        # Filter eliptických + info o poradí
+        order_box = QGroupBox("Nastavenia poradia")
+        order_layout = QVBoxLayout()
+        self.excl_elliptical_cb = QCheckBox("Vynechať eliptické galaxie (base_type = E)")
+        self.excl_elliptical_cb.setChecked(False)
+        self.excl_elliptical_cb.stateChanged.connect(self._on_elliptical_filter_changed)
+        order_layout.addWidget(self.excl_elliptical_cb)
+        order_info = QLabel("Poradie: náhodný round-robin cez typy (base_type)")
+        order_info.setStyleSheet("font-size: 11px; color: gray;")
+        order_layout.addWidget(order_info)
         order_box.setLayout(order_layout)
         right_layout.addWidget(order_box)
 
@@ -415,8 +605,9 @@ class GalaxyRatingApp(QWidget):
                 with open(OUTPUT_PATH, "r", newline="", encoding="utf-8") as f:
                     reader = csvmod.DictReader(f)
                     for row in reader:
-                        key = (row.get(RA_COL), row.get(DEC_COL))
-                        results[key] = row
+                        key = row.get(NAME)
+                        if key is not None:
+                            results[str(key)] = row
             except Exception:
                 pass
         return results
@@ -426,7 +617,6 @@ class GalaxyRatingApp(QWidget):
             self.image_label.setText("Všetky obrázky sú už ohodnotené.")
             self.info_label.setText("")
             self.main_params_label.setText("")
-            self.params_label.setText("")
             return
 
         self.zoom_factor = 1.0  # pri novom obrázku zoom resetni
@@ -447,72 +637,18 @@ class GalaxyRatingApp(QWidget):
         else:
             self._apply_scale("scale_1")  # predvolená mierka pri načítaní (aj zobrazí)
 
+        ra_str  = f"  {RA_COL}={row[RA_COL]}"  if RA_COL  in row.index else ""
+        dec_str = f"  {DEC_COL}={row[DEC_COL]}" if DEC_COL in row.index else ""
         self.info_label.setText(
             f"[{self.current_pos + 1}/{len(self.order)}]  "
-            f"{RA_COL}={row[RA_COL]}  {DEC_COL}={row[DEC_COL]}  ({fname})"
+            f"{NAME}={row[NAME]}{ra_str}{dec_str}  ({fname})"
         )
 
         # Hlavné (výrazné) parametre
-        DISPLAY_NAMES = {
-            "gz2_class": "GZ2",
-            "class_from_conf": "Conf. class",
-            "confidence": "Confidence",
-            "GZ1_type": "GZ1",
-            "nvote": "Votes"
-        }
-        
-        html = "<table cellspacing='3' cellpadding='1'>"
-
-        for i in range(0, len(self.main_param_columns), 2):
-
-            html += "<tr>"
-
-            for j in [i, i + 1]:
-                if j < len(self.main_param_columns):
-                    col = self.main_param_columns[j]
-                    name = DISPLAY_NAMES.get(col, col)
-                    value = row[col]
-
-                    # Zaokrúhlenie čísel
-                    if isinstance(value, float):
-                        value = f"{value:.3f}"
-
-                    html += f"""
-                        <td><b>{name}:</b></td>
-                        <td>{value}</td>
-                    """
-
-            html += "</tr>"
-
-        html += "</table>"
-
-        self.main_params_label.setText(html)
-
-        # Ostatné parametre
-        html = "<table cellspacing='2'>"
-
-        for i in range(0, len(self.param_columns), 2):
-
-            html += "<tr>"
-
-            for j in [i, i+1]:
-                if j < len(self.param_columns):
-                    col = self.param_columns[j]
-                    value = row[col]
-
-                    if isinstance(value, float):
-                        value = f"{value:.4f}"
-
-                    html += (
-                        f"<td><b>{col}</b></td>"
-                        f"<td align='right'>{value}</td>"
-                    )
-
-            html += "</tr>"
-
-        html += "</table>"
-
-        self.params_label.setText(html)
+        main_lines = [f"{col}: {row[col]}" for col in self.main_param_columns if col in row.index]
+        self.main_params_label.setText(
+            "\n".join(main_lines) if main_lines else "(žiadne hlavné parametre)"
+        )
 
         # Predvyplnenie checkboxov a poznámky, ak už bol tento obrázok hodnotený
         key = self._row_key(row)
@@ -570,6 +706,16 @@ class GalaxyRatingApp(QWidget):
             return True
         return super().eventFilter(source, event)
 
+    def _open_category_preview(self, category: str):
+        """Otvorí (alebo prenesie do popredia) okno s ukážkami danej kategórie."""
+        win = self._category_windows.get(category)
+        if win is None or not win.isVisible():
+            win = CategoryPreviewWindow(category, parent=None)
+            self._category_windows[category] = win
+        win.show()
+        win.raise_()
+        win.activateWindow()
+
     # ----------------------------------------------------------- Naviga.
     def _go_next(self):
         if self.current_pos < len(self.order) - 1:
@@ -585,13 +731,9 @@ class GalaxyRatingApp(QWidget):
         else:
             QMessageBox.information(self, "Začiatok", "Toto je prvý obrázok.")
 
-    def _set_sequential_order(self):
-        self.order = self._build_order(shuffle=False)
-        self.current_pos = 0
-        self._load_current_image()
-
-    def _set_random_order(self):
-        self.order = self._build_order(shuffle=True)
+    def _on_elliptical_filter_changed(self):
+        self.exclude_elliptical = self.excl_elliptical_cb.isChecked()
+        self.order = self._build_order()
         self.current_pos = 0
         self._load_current_image()
 
@@ -605,18 +747,16 @@ class GalaxyRatingApp(QWidget):
         note = self.note_edit.toPlainText().strip()
 
         key = self._row_key(row)
-        self.existing_results[key] = {
-            RA_COL: row[RA_COL],
-            DEC_COL: row[DEC_COL],
-            "questions": ";".join(checked),
-            "note": note,
-            "timestamp": datetime.now().isoformat(timespec="seconds"),
-        }
+        record = {NAME: row[NAME], "questions": ";".join(checked), "note": note,
+                  "timestamp": datetime.now().isoformat(timespec="seconds")}
+        if RA_COL in row.index:
+            record[RA_COL] = row[RA_COL]
+        if DEC_COL in row.index:
+            record[DEC_COL] = row[DEC_COL]
+        self.existing_results[key] = record
 
         self._write_output_file()
 
-        # Tento obrázok je hotový - vyhoď ho z poradia, aby sa už neopakoval.
-        # current_pos zostáva rovnaký - po odstránení na jeho mieste je ďalší obrázok.
         del self.order[self.current_pos]
         if self.current_pos >= len(self.order):
             self.current_pos = max(0, len(self.order) - 1)
@@ -624,9 +764,14 @@ class GalaxyRatingApp(QWidget):
         self._load_current_image()
 
     def _write_output_file(self):
-        fieldnames = [RA_COL, DEC_COL, "questions", "note", "timestamp"]
+        # Základné stĺpce vždy + ra/dec len ak existujú v dátach
+        base = [NAME]
+        for col in (RA_COL, DEC_COL):
+            if col in self.df.columns:
+                base.append(col)
+        fieldnames = base + ["questions", "note", "timestamp"]
         with open(OUTPUT_PATH, "w", newline="", encoding="utf-8") as f:
-            writer = csvmod.DictWriter(f, fieldnames=fieldnames)
+            writer = csvmod.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
             writer.writeheader()
             for key, rec in self.existing_results.items():
                 writer.writerow(rec)
